@@ -1,8 +1,11 @@
 import sys
 
-def say_hello(name):
-    return f"Hello, {name} from Python!"
+def process_name(name):
+    return f"{name} is a very beautiful person"
 
 if __name__ == "__main__":
-    name = sys.argv[1] if len(sys.argv) > 1 else "World"
-    print(say_hello(name))
+    if len(sys.argv) > 1:
+        name = sys.argv[1]
+        print(process_name(name))
+    else:
+        print("No name provided")
