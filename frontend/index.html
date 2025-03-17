@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Trigger Test</title>
+</head>
+<body>
+    <h1>Trigger Python on Railway</h1>
+    <input id="nameInput" type="text" placeholder="Enter your name">
+    <button onclick="runPython()">Run Python</button>
+    <p id="result"></p>
+
+    <script>
+        async function runPython() {
+            const name = document.getElementById('nameInput').value;
+            const response = await fetch('https://talk-production-2ba1.up.railway.app/run-python', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ name })
+            });
+            const result = await response.text();
+            document.getElementById('result').innerText = result;
+        }
+    </script>
+</body>
+</html>
