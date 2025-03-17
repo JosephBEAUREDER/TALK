@@ -4,15 +4,15 @@ FROM node:18
 # Install Python 3
 RUN apt-get update && apt-get install -y python3 python3-pip
 
-# Set working directory
+# Set working directory inside the container
 WORKDIR /app
 
-# Copy package.json and install dependencies
-COPY backend/package*.json ./
+# Copy the backend's package.json and install dependencies
+COPY package*.json ./
 RUN npm install
 
 # Copy the rest of the backend code
-COPY backend/ .
+COPY . .
 
 # Expose port 3000
 EXPOSE 3000
