@@ -1,21 +1,22 @@
 const express = require('express');
-const { exec } = require('child_process');
+const cors = require('cors'); // Import the CORS middleware
+
 const app = express();
-const port = process.env.PORT || 3000;
 
-app.use(express.json());
+// Enable CORS for a specific domain (your GitHub Pages URL)
+const corsOptions = {
+    origin: 'https://josephbeaureder.github.io/TALK/frontend/', // Replace with your actual GitHub Pages URL
+    methods: 'GET,POST',
+    allowedHeaders: 'Content-Type',
+};
 
+app.use(cors(corsOptions)); // Enable CORS for the specific domain
+
+// Your existing routes
 app.post('/run-python', (req, res) => {
-    const name = req.body.name || 'World';
-    exec(`python3 script.py ${name}`, (error, stdout, stderr) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            return res.status(500).send(`Error: ${stderr}`);
-        }
-        res.send(stdout);
-    });
+    // Your code to run the Python function
 });
 
-app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+app.listen(3000, () => {
+    console.log('Server is running on port 3000');
 });
