@@ -1,19 +1,17 @@
 const express = require('express');
-const cors = require('cors'); // Import the CORS middleware
-
+const cors = require('cors');
 const app = express();
 
 // Enable CORS for a specific domain (your GitHub Pages URL)
 const corsOptions = {
-    origin: 'https://josephbeaureder.github.io', // Base domain
-    methods: 'GET,POST',
-    allowedHeaders: 'Content-Type',
+    origin: 'https://josephbeaureder.github.io',
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
+    credentials: true,
+    optionsSuccessStatus: 204
 };
 
-app.use(cors(corsOptions)); // Enable CORS for the specific domain
-
-// Handle the OPTIONS preflight request
-app.options('*', cors(corsOptions)); // This handles preflight requests for all routes
+// Apply CORS middleware
+app.use(cors(corsOptions));
 
 // Your existing routes
 app.post('/run-python', (req, res) => {
@@ -21,6 +19,8 @@ app.post('/run-python', (req, res) => {
     res.send('Python function executed!');
 });
 
-app.listen(3000, () => {
-    console.log('Server is running on port 3000');
+// Use PORT environment variable provided by Railway
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+    console.log(`Server is running on port ${PORT}`);
 });
