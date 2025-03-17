@@ -12,6 +12,9 @@ const corsOptions = {
 
 app.use(cors(corsOptions)); // Enable CORS for the specific domain
 
+// Handle the OPTIONS preflight request
+app.options('*', cors(corsOptions)); // This handles preflight requests for all routes
+
 // Your existing routes
 app.post('/run-python', (req, res) => {
     // Your code to run the Python function
