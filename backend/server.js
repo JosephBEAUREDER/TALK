@@ -7,12 +7,10 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Database connection
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
-    max: 20, // Maximum number of clients in the pool
-    idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
-    connectionTimeoutMillis: 2000, // How long to wait for a connection
 });
 
 // Create tables if they don't exist
@@ -43,10 +41,12 @@ const createTables = async () => {
 
 createTables();
 
+// Health check endpoint
 app.get('/', (req, res) => {
     res.json({ status: 'Backend is running' });
 });
 
+// Endpoint to run Python script and store messages
 app.post('/run-python', async (req, res) => {
     const { name, conversationId, isNewConversation } = req.body;
     if (!name || !conversationId) {
@@ -54,6 +54,7 @@ app.post('/run-python', async (req, res) => {
     }
 
     try {
+        // Create or update conversation
         if (isNewConversation) {
             const title = name.substring(0, 30) + (name.length > 30 ? '...' : '');
             await pool.query(
@@ -62,37 +63,45 @@ app.post('/run-python', async (req, res) => {
             );
         }
 
+        // Store user message
         await pool.query(
             'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
             [conversationId, 'user', name]
         );
 
+        // Execute Python script
         exec(`python script.py "${name}" || python3 script.py "${name}"`, async (error, stdout, stderr) => {
             if (error) {
                 return res.status(500).json({ error: 'Script execution failed' });
             }
 
             const response = stdout.trim();
+
+            // Store AI response
             await pool.query(
                 'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
                 [conversationId, 'ai', response]
             );
+
+            // Update conversation timestamp
             await pool.query(
                 'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
                 [conversationId]
             );
 
-            res.json({ response, logs: ['Script executed successfully'] });
+            res.json({ response });
         });
     } catch (err) {
         console.error('Error:', err.message);
-        res.status(500).json({ error: 'Database error', logs: [`Error: ${err.message}`] });
+        res.status(500).json({ error: 'Database error' });
     }
 });
 
+// Endpoint to fetch all conversations
 app.get('/conversations', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM conversations ORDER BY updated_at DESC');
+        console.log('Returning conversations:', result.rows); // Add this
         res.json({ conversations: result.rows });
     } catch (err) {
         console.error('Error fetching conversations:', err.message);
@@ -100,6 +109,7 @@ app.get('/conversations', async (req, res) => {
     }
 });
 
+// Endpoint to fetch messages for a specific conversation
 app.get('/conversations/:conversationId/messages', async (req, res) => {
     const { conversationId } = req.params;
     try {
@@ -114,10 +124,8 @@ app.get('/conversations/:conversationId/messages', async (req, res) => {
     }
 });
 
+// Start the server
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
-
-
-

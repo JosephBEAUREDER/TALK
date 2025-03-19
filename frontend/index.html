@@ -246,329 +246,203 @@
         </div>
     </div>
     <script>
-
-        
     // Elements
-    const chatContainer = document.getElementById('chatContainer');
-    const messageInput = document.getElementById('messageInput');
-    const sendBtn = document.getElementById('sendBtn');
-    const chatHistory = document.getElementById('chatHistory');
-    const newChatBtn = document.querySelector('.new-chat-btn');
-    
-    // API endpoint
-    const API_URL = 'https://talk-production-2ba1.up.railway.app/run-python';
-    const BASE_URL = API_URL.split('/').slice(0, -1).join('/');
-    
-    // Chat history
-    let conversations = [];
-    let currentConversationId = generateId();
-    
-    // Auto-resize textarea
+const chatContainer = document.getElementById('chatContainer');
+const messageInput = document.getElementById('messageInput');
+const sendBtn = document.getElementById('sendBtn');
+const chatHistory = document.getElementById('chatHistory');
+const newChatBtn = document.querySelector('.new-chat-btn');
+
+// API endpoint
+const API_URL = 'https://talk-production-2ba1.up.railway.app/run-python';
+const BASE_URL = API_URL.split('/').slice(0, -1).join('/');
+
+// Chat state
+let currentConversationId = null;
+
+// Auto-resize textarea and handle input
+function setupInputListeners() {
     messageInput.addEventListener('input', function() {
         this.style.height = 'auto';
-        this.style.height = (this.scrollHeight) + 'px';
-        
-        // Enable/disable send button based on input content
+        this.style.height = `${this.scrollHeight}px`;
         sendBtn.disabled = !this.value.trim();
     });
-    
-    // Handle Enter key for sending messages
+
     messageInput.addEventListener('keydown', function(e) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === 'Enter' && !e.shiftKey && !sendBtn.disabled) {
             e.preventDefault();
-            if (!sendBtn.disabled) {
-                sendMessage();
-            }
+            sendMessage();
         }
     });
-    
-    // Send button click handler
+}
+
+// Button event handlers
+function setupButtonListeners() {
     sendBtn.addEventListener('click', sendMessage);
-    
-    // New chat button click handler
     newChatBtn.addEventListener('click', createNewChat);
+}
+
+// Generate unique ID
+function generateId() {
+    return Date.now().toString(36) + Math.random().toString(36).substring(2);
+}
+
+// Add message to chat display
+function addMessageToChat(role, content) {
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message message-${role}`;
     
-    // Function to send a message
-    function sendMessage() {
-        const message = messageInput.value.trim();
-        if (!message) return;
-        
-        // Add user message to chat
-        addMessageToChat('user', message);
-        
-        // Clear input
-        messageInput.value = '';
-        messageInput.style.height = '52px';
-        sendBtn.disabled = true;
-        
-        // Determine if this is a new conversation
-        const isNewConversation = !conversations.some(c => c.id === currentConversationId);
-        
-        // Call API and get response
-        getResponse(message, isNewConversation);
-        
-        // Add to chat history if this is a new conversation
-        if (isNewConversation) {
-            const newConversation = {
-                id: currentConversationId,
-                title: message.substring(0, 30) + (message.length > 30 ? '...' : ''),
-                messages: [{ role: 'user', content: message }]
-            };
-            conversations.push(newConversation);
-            updateChatHistory();
-        } else {
-            // Update existing conversation
-            const conversation = conversations.find(c => c.id === currentConversationId);
-            if (conversation) {
-                conversation.messages.push({ role: 'user', content: message });
-            }
-        }
-    }
+    const avatarDiv = document.createElement('div');
+    avatarDiv.className = `avatar avatar-${role}`;
+    avatarDiv.textContent = role === 'user' ? 'U' : 'AI';
     
-    async function getResponse(message, isNewConversation) {
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'message-content';
+    contentDiv.textContent = content;
+    
+    messageDiv.append(avatarDiv, contentDiv);
+    chatContainer.appendChild(messageDiv);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+}
+
+// Add typing indicator
+function addTypingIndicator() {
+    const indicator = document.createElement('div');
+    indicator.className = 'message message-ai typing-indicator';
+    indicator.id = `typing-${generateId()}`;
+    indicator.innerHTML = '<div class="avatar avatar-ai">AI</div><div class="message-content"><span class="dot-flashing"></span></div>';
+    chatContainer.appendChild(indicator);
+    chatContainer.scrollTop = chatContainer.scrollHeight;
+    return indicator.id;
+}
+
+// Remove typing indicator
+function removeTypingIndicator(id) {
+    const indicator = document.getElementById(id);
+    if (indicator) indicator.remove();
+}
+
+// Send message to backend
+async function sendMessage() {
+    const message = messageInput.value.trim();
+    if (!message || !currentConversationId) return;
+
+    addMessageToChat('user', message);
+    messageInput.value = '';
+    messageInput.style.height = '52px';
+    sendBtn.disabled = true;
+
+    const typingId = addTypingIndicator();
+    
     try {
+        const isNewConversation = chatContainer.children.length === 1;
         const response = await fetch(`${BASE_URL}/run-python`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 name: message,
                 conversationId: currentConversationId,
-                isNewConversation: isNewConversation
-            }),
+                isNewConversation
+            })
         });
 
-        if (!response.ok) {
-            throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('Backend response:', result);
-
-        addMessageToChat('ai', result.response || 'No response received from backend');
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        
+        const data = await response.json();
+        removeTypingIndicator(typingId);
+        addMessageToChat('ai', data.response || 'No response received');
+        await fetchConversations(); // Refresh conversation list
     } catch (error) {
-        console.error('Error:', error);
+        removeTypingIndicator(typingId);
         addMessageToChat('ai', `Error: ${error.message}`);
     }
 }
+
+// Fetch all conversations
+async function fetchConversations() {
+    try {
+        const response = await fetch(`${BASE_URL}/conversations`);
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        
+        const data = await response.json();
+        updateChatHistory(data.conversations);
+    } catch (error) {
+        console.error('Error fetching conversations:', error);
+        addMessageToChat('ai', 'Error loading conversation list');
+    }
+}
+
+// Update chat history sidebar
+function updateChatHistory(conversations) {
+    chatHistory.innerHTML = '';
     
+    conversations.forEach(conv => {
+        const item = document.createElement('div');
+        item.className = `history-item${conv.id === currentConversationId ? ' active' : ''}`;
+        item.textContent = conv.title;
+        item.dataset.id = conv.id;
+        
+        item.addEventListener('click', () => loadConversation(conv.id));
+        chatHistory.appendChild(item);
+    });
+}
+
+// Load specific conversation
+async function loadConversation(id) {
+    currentConversationId = id;
+    chatContainer.innerHTML = '';
+    const typingId = addTypingIndicator();
+
+    try {
+        const response = await fetch(`${BASE_URL}/conversations/${id}/messages`);
+        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        
+        const data = await response.json();
+        removeTypingIndicator(typingId);
+        
+        if (!data.messages.length) {
+            addMessageToChat('ai', 'No messages in this conversation yet');
+            return;
+        }
+
+        data.messages.forEach(msg => addMessageToChat(msg.role, msg.content));
+        await fetchConversations(); // Refresh sidebar
+    } catch (error) {
+        removeTypingIndicator(typingId);
+        addMessageToChat('ai', `Error loading conversation: ${error.message}`);
+    }
+}
+
+// Create new chat
+function createNewChat() {
+    currentConversationId = generateId();
+    chatContainer.innerHTML = '';
+    addMessageToChat('ai', 'Hello! How can I assist you today?');
+    fetchConversations(); // Refresh sidebar
+}
+
+// Test backend connection
 function testBackendConnection() {
     fetch(`${BASE_URL}/`)
-        .then(response => {
-            if (response.ok) {
-                console.log('✅ Backend connection successful');
-            } else {
-                console.error('❌ Backend connection failed');
-            }
-        })
-        .catch(error => {
-            console.error('❌ Backend connection test failed:', error);
-        });
+        .then(response => console.log(response.ok ? 
+            '✅ Backend connected' : '❌ Backend connection failed'))
+        .catch(error => console.error('❌ Backend test failed:', error));
 }
+
+// Initialize application
+function initializeApp() {
+    setupInputListeners();
+    setupButtonListeners();
+    testBackendConnection();
+    fetchConversations();
     
-    // Function to fetch all conversations from the backend
-    async function fetchConversations() {
-        try {
-            console.log('Fetching conversations...');
-            const conversationsUrl = `${BASE_URL}/conversations`;
-            
-            const response = await fetch(conversationsUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            console.log(`Fetched ${data.conversations.length} conversations`);
-            
-            // Update our local conversations array
-            conversations = data.conversations.map(conv => ({
-                id: conv.id,
-                title: conv.title,
-                messages: []
-            }));
-            
-            // Update the chat history sidebar
-            updateChatHistory();
-            
-            return data.conversations;
-        } catch (error) {
-            console.error('Error fetching conversations:', error);
-            return [];
-        }
+    if (!currentConversationId) {
+        createNewChat();
     }
-    
-    // Function to fetch messages for a specific conversation
-    async function fetchConversationMessages(conversationId) {
-        try {
-            console.log(`Fetching messages for conversation ${conversationId}...`);
-            const messagesUrl = `${BASE_URL}/conversations/${conversationId}/messages`;
-            
-            const response = await fetch(messagesUrl);
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            const data = await response.json();
-            console.log(`Fetched ${data.messages.length} messages for conversation ${conversationId}`);
-            
-            return data.messages;
-        } catch (error) {
-            console.error(`Error fetching messages for conversation ${conversationId}:`, error);
-            return [];
-        }
-    }
-    
-    // Call the test function when the page loads
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('Page loaded, testing backend connection');
-        testBackendConnection();
-        
-        // If there are no conversations, create a new one
-        if (conversations.length === 0) {
-            createNewChat();
-        }
-    });
-    
-    // Function to add a message to the chat
-    function addMessageToChat(role, content) {
-        const message = document.createElement('div');
-        message.className = `message message-${role}`;
-        
-        const avatar = document.createElement('div');
-        avatar.className = `avatar avatar-${role}`;
-        avatar.textContent = role === 'user' ? 'U' : 'AI';
-        
-        const messageContent = document.createElement('div');
-        messageContent.className = 'message-content';
-        messageContent.textContent = content;
-        
-        message.appendChild(avatar);
-        message.appendChild(messageContent);
-        
-        chatContainer.appendChild(message);
-        
-        // Scroll to bottom
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-        
-        return message;
-    }
-    
-    // Function to add typing indicator
-    function addTypingIndicator() {
-        const id = 'typing-indicator';
-        const indicator = document.createElement('div');
-        indicator.className = 'message message-ai';
-        indicator.id = id;
-        
-        const avatar = document.createElement('div');
-        avatar.className = 'avatar avatar-ai';
-        avatar.textContent = 'AI';
-        
-        const content = document.createElement('div');
-        content.className = 'message-content';
-        content.textContent = 'Typing...';
-        
-        indicator.appendChild(avatar);
-        indicator.appendChild(content);
-        
-        chatContainer.appendChild(indicator);
-        chatContainer.scrollTop = chatContainer.scrollHeight;
-        
-        return id;
-    }
-    
-    // Function to remove typing indicator
-    function removeTypingIndicator(id) {
-        const indicator = document.getElementById(id);
-        if (indicator) {
-            chatContainer.removeChild(indicator);
-        }
-    }
-    
-    // Function to update chat history sidebar
-    function updateChatHistory() {
-        chatHistory.innerHTML = '';
-        
-        conversations.forEach(conversation => {
-            const historyItem = document.createElement('div');
-            historyItem.className = 'history-item';
-            historyItem.textContent = conversation.title;
-            historyItem.dataset.id = conversation.id;
-            
-            // Highlight the current conversation
-            if (conversation.id === currentConversationId) {
-                historyItem.classList.add('active');
-            }
-            
-            historyItem.addEventListener('click', () => {
-                loadConversation(conversation.id);
-            });
-            
-            chatHistory.appendChild(historyItem);
-        });
-    }
-    
-    // Function to load a conversation
-    async function loadConversation(id) {
-        currentConversationId = id;
-        
-        // Clear chat container
-        chatContainer.innerHTML = '';
-        
-        // Add loading indicator
-        const loadingId = addTypingIndicator();
-        
-        try {
-            // Fetch messages for this conversation
-            const messages = await fetchConversationMessages(id);
-            
-            // Remove loading indicator
-            removeTypingIndicator(loadingId);
-            
-            // Check if we have messages
-            if (messages.length === 0) {
-                addMessageToChat('ai', 'No messages found for this conversation.');
-                return;
-            }
-            
-            // Add messages to chat
-            messages.forEach(msg => {
-                addMessageToChat(msg.role, msg.content);
-            });
-            
-            // Update the conversation object
-            const conversation = conversations.find(c => c.id === id);
-            if (conversation) {
-                conversation.messages = messages;
-            }
-            
-            // Update chat history to highlight the current conversation
-            updateChatHistory();
-            
-            // Scroll to bottom
-            chatContainer.scrollTop = chatContainer.scrollHeight;
-        } catch (error) {
-            console.error('Error loading conversation:', error);
-            removeTypingIndicator(loadingId);
-            addMessageToChat('ai', 'Error loading conversation. Please try again.');
-        }
-    }
-    
-    // Function to create a new chat
-    function createNewChat() {
-        currentConversationId = generateId();
-        chatContainer.innerHTML = '';
-        
-        // Add initial AI message
-        addMessageToChat('ai', 'Hello! How can I help you today?');
-        
-        // Update chat history to show the new conversation is active
-        updateChatHistory();
-    }
-    
-    // Function to generate a unique ID
-    function generateId() {
-        return Date.now().toString(36) + Math.random().toString(36).substring(2);
-    }
+}
+
+// Start app when DOM is loaded
+document.addEventListener('DOMContentLoaded', initializeApp);
 </script>
 </body>
 </html>
