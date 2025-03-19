@@ -425,6 +425,31 @@ function testBackendConnection() {
     });
 }
 
+// Add this function to fetch message history from the backend
+async function fetchMessageHistory() {
+    try {
+        console.log('Fetching message history...');
+        
+        // Get the base URL from your API_URL
+        const baseUrl = API_URL.split('/').slice(0, -1).join('/');
+        const historyUrl = `${baseUrl}/messages`;
+        
+        const response = await fetch(historyUrl);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const data = await response.json();
+        console.log(`Fetched ${data.messages.length} messages from history`);
+        
+        return data.messages;
+    } catch (error) {
+        console.error('Error fetching message history:', error);
+        return [];
+    }
+}
+
+
 // Call the test function when the page loads
 document.addEventListener('DOMContentLoaded', () => {
     console.log('Page loaded, testing backend connection');

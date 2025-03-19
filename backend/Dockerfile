@@ -15,8 +15,8 @@ RUN npm install
 # Copy the rest of the backend code
 COPY . .
 
-# Expose port 3000
-EXPOSE 3000
+# Expose port 8080
+EXPOSE 8080
 
 # Start the server
 CMD ["node", "server.js"]
