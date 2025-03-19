@@ -317,46 +317,52 @@
             }
         }
         
-        // Function to get response from API
         async function getResponse(message) {
             try {
                 // Show typing indicator
                 const typingIndicatorId = addTypingIndicator();
-                
+
                 // Call API
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: message })
                 });
-                
+
+                // Check if the response is OK
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-                
-                const result = await response.text();
-                
+
+                // Parse the response as JSON
+                const result = await response.json();
+
                 // Remove typing indicator
                 removeTypingIndicator(typingIndicatorId);
-                
+
+                // Log backend logs to the frontend console
+                if (result.logs) {
+                    console.log('Backend logs:', result.logs);
+                }
+
                 // Add AI response to chat
-                addMessageToChat('ai', result);
-                
+                addMessageToChat('ai', result.response);
+
                 // Add to conversation history
                 const conversation = conversations.find(c => c.id === currentConversationId);
                 if (conversation) {
-                    conversation.messages.push({ role: 'ai', content: result });
+                    conversation.messages.push({ role: 'ai', content: result.response });
                 }
-                
+
             } catch (error) {
                 console.error('Error:', error);
-                
+
                 // Remove typing indicator if there was an error
                 const typingIndicator = document.getElementById('typing-indicator');
                 if (typingIndicator) {
                     chatContainer.removeChild(typingIndicator);
                 }
-                
+
                 // Show error message
                 addMessageToChat('ai', `Error: ${error.message}`);
             }

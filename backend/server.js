@@ -11,7 +11,7 @@ const corsOptions = {
     credentials: true,
     optionsSuccessStatus: 204
 };
-app.use(cors()); 
+app.use(cors(corsOptions));
 app.use(express.json());
 
 // PostgreSQL setup
@@ -34,18 +34,27 @@ client.connect().then(() => {
 // Route to run Python and save the conversation
 app.post('/run-python', (req, res) => {
     const { name } = req.body;
-    if (!name) return res.status(400).send('Name is required');
+    if (!name) return res.status(400).json({ error: 'Name is required', logs: ['Name parameter is missing'] });
+
+    console.log('Received request to run Python script with input:', name);
 
     // Execute Python script
-    exec('python --version || python3 --version', () => {
+    exec('python --version || python3 --version', (error, stdout, stderr) => {
+        if (error) {
+            console.error('Error checking Python version:', error);
+            return res.status(500).json({ error: 'Python is not installed', logs: ['Python version check failed'] });
+        }
+
+        console.log('Python version check successful:', stdout.trim());
+
         exec(`python script.py "${name}" || python3 script.py "${name}"`, (error, stdout, stderr) => {
             if (error) {
-                console.error(`Error executing Python: ${error}`);
-                return res.status(500).send('Script execution failed');
+                console.error(`Error executing Python script: ${error}`);
+                return res.status(500).json({ error: 'Script execution failed', logs: [`Python script error: ${error.message}`] });
             }
 
             const response = stdout.trim();
-            console.log('Python output:', response);
+            console.log('Python script output:', response);
 
             // Store in PostgreSQL
             client.query(
@@ -54,10 +63,18 @@ app.post('/run-python', (req, res) => {
                 (err, result) => {
                     if (err) {
                         console.error('Error storing conversation:', err.message);
-                        return res.status(500).send('Failed to store conversation');
+                        return res.status(500).json({ error: 'Failed to store conversation', logs: [`Database error: ${err.message}`] });
                     }
-                    console.log('Stored with ID:', result.rows[0].id);
-                    res.send(response);
+
+                    console.log('Conversation stored with ID:', result.rows[0].id);
+                    res.json({
+                        response: response,
+                        logs: [
+                            'Python script executed successfully',
+                            `Python output: ${response}`,
+                            `Conversation stored with ID: ${result.rows[0].id}`
+                        ]
+                    });
                 }
             );
         });
@@ -68,10 +85,14 @@ app.post('/run-python', (req, res) => {
 app.get('/conversations', async (req, res) => {
     try {
         const result = await client.query('SELECT * FROM conversations ORDER BY created_at DESC');
-        res.json(result.rows);
+        console.log('Fetched conversations:', result.rows);
+        res.json({
+            conversations: result.rows,
+            logs: ['Conversations fetched successfully']
+        });
     } catch (err) {
         console.error('Error fetching conversations:', err.message);
-        res.status(500).send('Failed to fetch conversations');
+        res.status(500).json({ error: 'Failed to fetch conversations', logs: [`Database error: ${err.message}`] });
     }
 });
 
