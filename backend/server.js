@@ -10,6 +10,9 @@ app.use(express.json());
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
+    max: 20, // Maximum number of clients in the pool
+    idleTimeoutMillis: 30000, // How long a client is allowed to remain idle before being closed
+    connectionTimeoutMillis: 2000, // How long to wait for a connection
 });
 
 // Create tables if they don't exist
@@ -46,7 +49,9 @@ app.get('/', (req, res) => {
 
 app.post('/run-python', async (req, res) => {
     const { name, conversationId, isNewConversation } = req.body;
-    if (!name || !conversationId) return res.status(400).json({ error: 'Name and Conversation ID are required' });
+    if (!name || !conversationId) {
+        return res.status(400).json({ error: 'Name and Conversation ID are required' });
+    }
 
     try {
         if (isNewConversation) {
@@ -63,7 +68,9 @@ app.post('/run-python', async (req, res) => {
         );
 
         exec(`python script.py "${name}" || python3 script.py "${name}"`, async (error, stdout, stderr) => {
-            if (error) return res.status(500).json({ error: 'Script execution failed' });
+            if (error) {
+                return res.status(500).json({ error: 'Script execution failed' });
+            }
 
             const response = stdout.trim();
             await pool.query(
@@ -75,11 +82,11 @@ app.post('/run-python', async (req, res) => {
                 [conversationId]
             );
 
-            res.json({ response });
+            res.json({ response, logs: ['Script executed successfully'] });
         });
     } catch (err) {
         console.error('Error:', err.message);
-        res.status(500).json({ error: 'Database error' });
+        res.status(500).json({ error: 'Database error', logs: [`Error: ${err.message}`] });
     }
 });
 
@@ -111,3 +118,6 @@ const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
 });
+
+
+

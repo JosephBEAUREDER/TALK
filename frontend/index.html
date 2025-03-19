@@ -326,113 +326,44 @@
     }
     
     async function getResponse(message, isNewConversation) {
-        try {
-            console.log('Attempting to connect to backend at:', API_URL);
-            
-            // Show typing indicator
-            const typingIndicatorId = addTypingIndicator();
-            
-            // Call API with explicit timeout
-            console.log('Sending request with message:', message);
-            const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 15000); // 15 second timeout
-            
-            const response = await fetch(API_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    name: message,
-                    conversationId: currentConversationId,
-                    isNewConversation: isNewConversation
-                }),
-                signal: controller.signal
-            });
-            
-            clearTimeout(timeoutId);
-            console.log('Response received with status:', response.status);
-            
-            // Check if the response is OK
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            
-            // Parse the response as JSON
-            const result = await response.json();
-            console.log('Backend response decoded:', result);
-            
-            // Remove typing indicator
-            removeTypingIndicator(typingIndicatorId);
-            
-            // Log backend logs to the frontend console
-            if (result.logs) {
-                console.log('Backend logs:', result.logs);
-            }
-            
-            // Add AI response to chat
-            addMessageToChat('ai', result.response || 'No response received from backend');
-            
-            // Add to conversation history
-            const conversation = conversations.find(c => c.id === currentConversationId);
-            if (conversation) {
-                conversation.messages.push({ role: 'ai', content: result.response || 'No response received' });
-                console.log('Updated conversation history:', conversation);
-            }
-        } catch (error) {
-            console.error('Connection error:', error);
-            console.error('Error details:', {
-                message: error.message,
-                name: error.name,
-                stack: error.stack
-            });
-            
-            // Remove typing indicator if there was an error
-            const typingIndicator = document.getElementById('typing-indicator');
-            if (typingIndicator) {
-                chatContainer.removeChild(typingIndicator);
-            }
-            
-            let errorMessage = error.message;
-            if (error.name === 'AbortError') {
-                errorMessage = 'Request timed out. The server might be unavailable or the connection is slow.';
-            } else if (error.message.includes('Failed to fetch')) {
-                errorMessage = 'Could not connect to the backend server. Please check if the server is running and accessible.';
-            }
-            
-            // Show error message
-            addMessageToChat('ai', `Error connecting to backend: ${errorMessage}. Check console for details.`);
+    try {
+        const response = await fetch(`${BASE_URL}/run-python`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: message,
+                conversationId: currentConversationId,
+                isNewConversation: isNewConversation
+            }),
+        });
+
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
         }
+
+        const result = await response.json();
+        console.log('Backend response:', result);
+
+        addMessageToChat('ai', result.response || 'No response received from backend');
+    } catch (error) {
+        console.error('Error:', error);
+        addMessageToChat('ai', `Error: ${error.message}`);
     }
+}
     
-    // Function to test the connection when the page loads
-    function testBackendConnection() {
-        console.log('Testing backend connection...');
-        // Extract the base URL from API_URL to test the root endpoint
-        const baseUrl = API_URL.split('/').slice(0, -1).join('/');
-        console.log('Testing base URL:', baseUrl);
-        
-        fetch(baseUrl, {
-            method: 'GET',
-            headers: { 'Content-Type': 'application/json' }
-        })
+function testBackendConnection() {
+    fetch(`${BASE_URL}/`)
         .then(response => {
-            console.log('Connection test response status:', response.status);
             if (response.ok) {
                 console.log('✅ Backend connection successful');
-                return response.json();
             } else {
-                console.log('❌ Backend connection failed with status:', response.status);
-                throw new Error(`Status code: ${response.status}`);
+                console.error('❌ Backend connection failed');
             }
-        })
-        .then(data => {
-            console.log('Backend response:', data);
-            // Now fetch conversation history
-            fetchConversations();
         })
         .catch(error => {
             console.error('❌ Backend connection test failed:', error);
         });
-    }
+}
     
     // Function to fetch all conversations from the backend
     async function fetchConversations() {
