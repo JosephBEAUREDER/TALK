@@ -6,20 +6,29 @@ const app = express();
 
 // Enable CORS for GitHub Pages
 const corsOptions = {
-    origin: 'https://josephbeaureder.github.io',
+    // Allow requests from GitHub Pages and also from local development
+    origin: ['https://josephbeaureder.github.io', 'http://localhost:3000'],
     methods: 'GET,HEAD,PUT,PATCH,POST,DELETE',
     credentials: true,
     optionsSuccessStatus: 204
 };
+
 app.use(cors(corsOptions));
 app.use(express.json());
 
-// PostgreSQL setup
-const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL.includes('railway.app')
+// Log all incoming requests for debugging
+app.use((req, res, next) => {
+    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    next();
 });
 
+// PostgreSQL setup - with error handling
+const client = new Client({
+    connectionString: process.env.DATABASE_URL,
+    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway.app') ? { rejectUnauthorized: false } : false
+});
+
+// Try to connect to DB but continue if it fails
 client.connect().then(() => {
     console.log('Connected to PostgreSQL');
     client.query(`
@@ -30,9 +39,12 @@ client.connect().then(() => {
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     `);
-}).catch(err => console.error('Connection error:', err.stack));
+}).catch(err => {
+    console.error('Connection error with database:', err.stack);
+    console.log('Continuing without database connection');
+});
 
-// Simple route for connection testing
+// Simple health check route
 app.get('/', (req, res) => {
     console.log('Received connection test request');
     res.json({ 
@@ -42,7 +54,7 @@ app.get('/', (req, res) => {
     });
 });
 
-// Route to run Python and save the conversation
+// Route to run Python script
 app.post('/run-python', (req, res) => {
     const { name } = req.body;
     if (!name) return res.status(400).json({ error: 'Name is required', logs: ['Name parameter is missing'] });
@@ -67,27 +79,60 @@ app.post('/run-python', (req, res) => {
             const response = stdout.trim();
             console.log('Python script output:', response);
             
-            // Store in PostgreSQL
-            client.query(
-                'INSERT INTO conversations (name, response) VALUES ($1, $2) RETURNING id',
-                [name, response],
-                (err, result) => {
-                    if (err) {
-                        console.error('Error storing conversation:', err.message);
-                        return res.status(500).json({ error: 'Failed to store conversation', logs: [`Database error: ${err.message}`] });
-                    }
-                    
-                    console.log('Conversation stored with ID:', result.rows[0].id);
+            // Try to store in PostgreSQL if connected
+            try {
+                if (client) {
+                    client.query(
+                        'INSERT INTO conversations (name, response) VALUES ($1, $2) RETURNING id',
+                        [name, response],
+                        (err, result) => {
+                            if (err) {
+                                console.error('Error storing conversation:', err.message);
+                                // Still return the response even if DB storage fails
+                                return res.json({
+                                    response: response,
+                                    logs: [
+                                        'Python script executed successfully',
+                                        `Python output: ${response}`,
+                                        `Database error: ${err.message}`
+                                    ]
+                                });
+                            }
+                            
+                            console.log('Conversation stored with ID:', result.rows[0].id);
+                            res.json({
+                                response: response,
+                                logs: [
+                                    'Python script executed successfully',
+                                    `Python output: ${response}`,
+                                    `Conversation stored with ID: ${result.rows[0].id}`
+                                ]
+                            });
+                        }
+                    );
+                } else {
+                    // If DB connection failed, still return the response
                     res.json({
                         response: response,
                         logs: [
                             'Python script executed successfully',
                             `Python output: ${response}`,
-                            `Conversation stored with ID: ${result.rows[0].id}`
+                            'Database not connected - response not stored'
                         ]
                     });
                 }
-            );
+            } catch (err) {
+                // Catch any unexpected errors and still return the response
+                console.error('Unexpected error:', err);
+                res.json({
+                    response: response,
+                    logs: [
+                        'Python script executed successfully',
+                        `Python output: ${response}`,
+                        'Error during database operation - response not stored'
+                    ]
+                });
+            }
         });
     });
 });
