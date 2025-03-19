@@ -335,7 +335,12 @@ async function sendMessage() {
     const typingId = addTypingIndicator();
     
     try {
-        const isNewConversation = chatContainer.children.length === 1;
+        // Check if this conversation ID already exists in the conversations table
+        const responseConversations = await fetch(`${BASE_URL}/conversations`);
+        if (!responseConversations.ok) throw new Error('Failed to fetch conversations');
+        const { conversations } = await responseConversations.json();
+        const isNewConversation = !conversations.some(conv => conv.id === currentConversationId);
+
         const response = await fetch(`${BASE_URL}/run-python`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
