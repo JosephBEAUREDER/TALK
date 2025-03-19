@@ -1,6 +1,5 @@
 const express = require('express');
 const cors = require('cors');
-const { Client } = require('pg');
 const { exec } = require('child_process');
 const app = express();
 
@@ -20,28 +19,6 @@ app.use(express.json());
 app.use((req, res, next) => {
     console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
-});
-
-// PostgreSQL setup - with error handling
-const client = new Client({
-    connectionString: process.env.DATABASE_URL,
-    ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway.app') ? { rejectUnauthorized: false } : false
-});
-
-// Try to connect to DB but continue if it fails
-client.connect().then(() => {
-    console.log('Connected to PostgreSQL');
-    client.query(`
-        CREATE TABLE IF NOT EXISTS conversations (
-            id SERIAL PRIMARY KEY,
-            name TEXT NOT NULL,
-            response TEXT NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-}).catch(err => {
-    console.error('Connection error with database:', err.stack);
-    console.log('Continuing without database connection');
 });
 
 // Simple health check route
@@ -79,77 +56,16 @@ app.post('/run-python', (req, res) => {
             const response = stdout.trim();
             console.log('Python script output:', response);
             
-            // Try to store in PostgreSQL if connected
-            try {
-                if (client) {
-                    client.query(
-                        'INSERT INTO conversations (name, response) VALUES ($1, $2) RETURNING id',
-                        [name, response],
-                        (err, result) => {
-                            if (err) {
-                                console.error('Error storing conversation:', err.message);
-                                // Still return the response even if DB storage fails
-                                return res.json({
-                                    response: response,
-                                    logs: [
-                                        'Python script executed successfully',
-                                        `Python output: ${response}`,
-                                        `Database error: ${err.message}`
-                                    ]
-                                });
-                            }
-                            
-                            console.log('Conversation stored with ID:', result.rows[0].id);
-                            res.json({
-                                response: response,
-                                logs: [
-                                    'Python script executed successfully',
-                                    `Python output: ${response}`,
-                                    `Conversation stored with ID: ${result.rows[0].id}`
-                                ]
-                            });
-                        }
-                    );
-                } else {
-                    // If DB connection failed, still return the response
-                    res.json({
-                        response: response,
-                        logs: [
-                            'Python script executed successfully',
-                            `Python output: ${response}`,
-                            'Database not connected - response not stored'
-                        ]
-                    });
-                }
-            } catch (err) {
-                // Catch any unexpected errors and still return the response
-                console.error('Unexpected error:', err);
-                res.json({
-                    response: response,
-                    logs: [
-                        'Python script executed successfully',
-                        `Python output: ${response}`,
-                        'Error during database operation - response not stored'
-                    ]
-                });
-            }
+            // Simply return the response from the Python script
+            res.json({
+                response: response,
+                logs: [
+                    'Python script executed successfully',
+                    `Python output: ${response}`
+                ]
+            });
         });
     });
-});
-
-// Route to get all conversations
-app.get('/conversations', async (req, res) => {
-    try {
-        const result = await client.query('SELECT * FROM conversations ORDER BY created_at DESC');
-        console.log('Fetched conversations:', result.rows);
-        res.json({
-            conversations: result.rows,
-            logs: ['Conversations fetched successfully']
-        });
-    } catch (err) {
-        console.error('Error fetching conversations:', err.message);
-        res.status(500).json({ error: 'Failed to fetch conversations', logs: [`Database error: ${err.message}`] });
-    }
 });
 
 // Server start
