@@ -11,7 +11,7 @@ const corsOptions = {
     credentials: true,
     optionsSuccessStatus: 204
 };
-app.use(cors(corsOptions));
+app.use(cors()); 
 app.use(express.json());
 
 // PostgreSQL setup
