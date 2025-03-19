@@ -48,49 +48,71 @@ app.get('/', (req, res) => {
 
 // Endpoint to run Python script and store messages
 app.post('/run-python', async (req, res) => {
-    const { name, conversationId, isNewConversation } = req.body;
-    if (!name || !conversationId) {
-        return res.status(400).json({ error: 'Name and Conversation ID are required' });
+    console.log('Received request body:', req.body); // Debug log
+    const { messages, name, conversationId, isNewConversation } = req.body;
+
+    // Handle both old (name) and new (messages) formats
+    let messagesToProcess = [];
+    if (messages && Array.isArray(messages) && messages.length > 0) {
+        messagesToProcess = messages;
+    } else if (name && typeof name === 'string') {
+        messagesToProcess = [{ role: 'user', content: name }];
+    } else {
+        return res.status(400).json({ error: 'Either "messages" array or "name" string and Conversation ID are required' });
+    }
+
+    if (!conversationId) {
+        return res.status(400).json({ error: 'Conversation ID is required' });
     }
 
     try {
         // Create or update conversation
         if (isNewConversation) {
-            const title = name.substring(0, 30) + (name.length > 30 ? '...' : '');
+            const title = messagesToProcess[0].content.substring(0, 30) + (messagesToProcess[0].content.length > 30 ? '...' : '');
             await pool.query(
                 'INSERT INTO conversations (id, title) VALUES ($1, $2) ON CONFLICT (id) DO UPDATE SET title = $2, updated_at = CURRENT_TIMESTAMP',
                 [conversationId, title]
             );
         }
 
-        // Store user message
-        await pool.query(
-            'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
-            [conversationId, 'user', name]
-        );
-
-        // Execute Python script
-        exec(`python script.py "${name}" || python3 script.py "${name}"`, async (error, stdout, stderr) => {
-            if (error) {
-                return res.status(500).json({ error: 'Script execution failed' });
-            }
-
-            const response = stdout.trim();
-
-            // Store AI response
+        // Store all messages
+        for (const msg of messagesToProcess) {
             await pool.query(
                 'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
-                [conversationId, 'ai', response]
+                [conversationId, msg.role || 'user', msg.content]
             );
+        }
 
-            // Update conversation timestamp
-            await pool.query(
-                'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-                [conversationId]
-            );
+        // Only run the script if there's a user message
+        const userMessages = messagesToProcess.filter(m => m.role === 'user');
+        if (userMessages.length > 0) {
+            const lastUserMessage = userMessages[userMessages.length - 1].content;
 
-            res.json({ response });
-        });
+            exec(`python script.py "${lastUserMessage}" || python3 script.py "${lastUserMessage}"`, async (error, stdout, stderr) => {
+                if (error) {
+                    console.error('Script execution error:', stderr);
+                    return res.status(500).json({ error: 'Script execution failed' });
+                }
+
+                const response = stdout.trim();
+
+                // Store AI response
+                await pool.query(
+                    'INSERT INTO messages (conversation_id, role, content) VALUES ($1, $2, $3)',
+                    [conversationId, 'ai', response]
+                );
+
+                // Update conversation timestamp
+                await pool.query(
+                    'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
+                    [conversationId]
+                );
+
+                res.json({ response });
+            });
+        } else {
+            res.json({ response: messagesToProcess[messagesToProcess.length - 1].content });
+        }
     } catch (err) {
         console.error('Error:', err.message);
         res.status(500).json({ error: 'Database error' });
@@ -101,7 +123,7 @@ app.post('/run-python', async (req, res) => {
 app.get('/conversations', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM conversations ORDER BY updated_at DESC');
-        console.log('Returning conversations:', result.rows); // Add this
+        console.log('Returning conversations:', result.rows);
         res.json({ conversations: result.rows });
     } catch (err) {
         console.error('Error fetching conversations:', err.message);

@@ -322,6 +322,8 @@ function removeTypingIndicator(id) {
     if (indicator) indicator.remove();
 }
 
+
+
 // Send message to backend
 async function sendMessage() {
     const message = messageInput.value.trim();
@@ -335,33 +337,44 @@ async function sendMessage() {
     const typingId = addTypingIndicator();
     
     try {
-        // Check if this conversation ID already exists in the conversations table
         const responseConversations = await fetch(`${BASE_URL}/conversations`);
         if (!responseConversations.ok) throw new Error('Failed to fetch conversations');
         const { conversations } = await responseConversations.json();
         const isNewConversation = !conversations.some(conv => conv.id === currentConversationId);
 
+        const payload = {
+            messages: isNewConversation 
+                ? [
+                    { role: 'ai', content: 'Hello! How can I assist you today?' },
+                    { role: 'user', content: message }
+                  ]
+                : [{ role: 'user', content: message }],
+            conversationId: currentConversationId,
+            isNewConversation
+        };
+        console.log('Sending to backend:', payload); // Debug log
+
         const response = await fetch(`${BASE_URL}/run-python`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: message,
-                conversationId: currentConversationId,
-                isNewConversation
-            })
+            body: JSON.stringify(payload)
         });
 
-        if (!response.ok) throw new Error(`HTTP error: ${response.status}`);
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(`HTTP error: ${response.status} - ${errorData.error || 'Unknown error'}`);
+        }
         
         const data = await response.json();
         removeTypingIndicator(typingId);
         addMessageToChat('ai', data.response || 'No response received');
-        await fetchConversations(); // Refresh conversation list
+        await fetchConversations();
     } catch (error) {
         removeTypingIndicator(typingId);
         addMessageToChat('ai', `Error: ${error.message}`);
     }
 }
+
 
 // Fetch all conversations
 async function fetchConversations() {
@@ -425,6 +438,7 @@ function createNewChat() {
     addMessageToChat('ai', 'Hello! How can I assist you today?');
     fetchConversations(); // Refresh sidebar
 }
+
 
 // Test backend connection
 function testBackendConnection() {
