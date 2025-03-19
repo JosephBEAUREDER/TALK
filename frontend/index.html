@@ -319,54 +319,90 @@
         
         async function getResponse(message) {
             try {
+                console.log('Attempting to connect to backend at:', API_URL);
+                
                 // Show typing indicator
                 const typingIndicatorId = addTypingIndicator();
-
+                
                 // Call API
+                console.log('Sending request with message:', message);
                 const response = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ name: message })
                 });
-
+                
+                console.log('Response received with status:', response.status);
+                
                 // Check if the response is OK
                 if (!response.ok) {
                     throw new Error(`HTTP error! status: ${response.status}`);
                 }
-
+                
                 // Parse the response as JSON
                 const result = await response.json();
-
+                console.log('Backend response decoded:', result);
+                
                 // Remove typing indicator
                 removeTypingIndicator(typingIndicatorId);
-
+                
                 // Log backend logs to the frontend console
                 if (result.logs) {
                     console.log('Backend logs:', result.logs);
                 }
-
+                
                 // Add AI response to chat
                 addMessageToChat('ai', result.response);
-
+                
                 // Add to conversation history
                 const conversation = conversations.find(c => c.id === currentConversationId);
                 if (conversation) {
                     conversation.messages.push({ role: 'ai', content: result.response });
+                    console.log('Updated conversation history:', conversation);
                 }
-
             } catch (error) {
-                console.error('Error:', error);
-
+                console.error('Connection error:', error);
+                console.error('Error details:', {
+                    message: error.message,
+                    stack: error.stack
+                });
+                
                 // Remove typing indicator if there was an error
                 const typingIndicator = document.getElementById('typing-indicator');
                 if (typingIndicator) {
                     chatContainer.removeChild(typingIndicator);
                 }
-
+                
                 // Show error message
-                addMessageToChat('ai', `Error: ${error.message}`);
+                addMessageToChat('ai', `Error connecting to backend: ${error.message}. Check console for details.`);
             }
         }
+
+        // Add a function to test the connection when the page loads
+        function testBackendConnection() {
+            console.log('Testing backend connection...');
+            fetch(API_URL, {
+                method: 'GET',
+                headers: { 'Content-Type': 'application/json' }
+            })
+            .then(response => {
+                console.log('Connection test response status:', response.status);
+                if (response.ok) {
+                    console.log('✅ Backend connection successful');
+                } else {
+                    console.log('❌ Backend connection failed with status:', response.status);
+                }
+            })
+            .catch(error => {
+                console.error('❌ Backend connection test failed:', error);
+            });
+        }
+
+        // Call the test function when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('Page loaded, testing backend connection');
+            testBackendConnection();
+        });
         
         // Function to add a message to the chat
         function addMessageToChat(role, content) {
