@@ -137,7 +137,7 @@ app.post('/run-python', async (req, res) => {
 app.get('/conversations', async (req, res) => {
     try {
         const result = await pool.query('SELECT * FROM conversations ORDER BY updated_at DESC');
-        console.log('Returning conversations:', result.rows);
+        // console.log('Returning conversations:', result.rows);
         res.json({ conversations: result.rows });
     } catch (err) {
         console.error('Error fetching conversations:', err.message);

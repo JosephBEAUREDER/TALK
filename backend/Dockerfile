@@ -4,6 +4,7 @@ FROM node:18
 # Install Python 3
 RUN apt-get update && apt-get install -y python3 python3-pip
 
+
 # Set working directory inside the container
 WORKDIR /app
 
@@ -11,6 +12,10 @@ WORKDIR /app
 COPY package*.json ./
 
 RUN npm install
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip3 install -r requirements.txt
 
 # Copy the rest of the backend code
 COPY . .
