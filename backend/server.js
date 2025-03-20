@@ -102,7 +102,7 @@ app.post('/run-python', async (req, res) => {
         if (userMessages.length > 0) {
             const lastUserMessage = userMessages[userMessages.length - 1].content;
 
-            exec(`python script.py "${lastUserMessage}" || python3 script.py "${lastUserMessage}"`, async (error, stdout, stderr) => {
+            exec(`/app/venv/bin/python script.py "${lastUserMessage}"`, async (error, stdout, stderr) => {
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });
