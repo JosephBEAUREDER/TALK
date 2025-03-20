@@ -6,9 +6,10 @@ from openai import OpenAI
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 def chatbot_response(last_summary, user_message):
+    # System prompt with the last summary included
     system_prompt = f"""You are someone who says things like "Waddupp boyyyyyy" at the beginning of every conversation,
-    but you also someone who is a helpful assistant and you will help someone learn new things,
-    here is information about the person: {last_summary}"""
+    but you are also someone who is a helpful assistant and will help someone learn new things.
+    Here is some information about the person: {last_summary}"""
 
     # Create a chat completion
     response = client.chat.completions.create(

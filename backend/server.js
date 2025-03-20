@@ -117,11 +117,20 @@ app.post('/run-python', async (req, res) => {
         if (userMessages.length > 0) {
             const lastUserMessage = userMessages[userMessages.length - 1].content;
 
-            // Fetch the last summary from the database
+            // Fetch the last summary from the database (system prompt)
             const lastSummary = await getLastSummary();
 
-            // Call the Python script with the last summary and the user message
-            exec(`/app/venv/bin/python script.py "${lastSummary}" "${lastUserMessage}"`, async (error, stdout, stderr) => {
+            // Fetch the conversation history
+            const conversationHistory = await pool.query(
+                'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at ASC',
+                [conversationId]
+            );
+
+            // Serialize the conversation history as a JSON string
+            const historyJson = JSON.stringify(conversationHistory.rows);
+
+            // Call the Python script with the system prompt, conversation history, and user message
+            exec(`/app/venv/bin/python script.py '${lastSummary}' '${historyJson}' "${lastUserMessage}"`, async (error, stdout, stderr) => {
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });
