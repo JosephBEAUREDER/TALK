@@ -60,6 +60,21 @@ app.get('/', (req, res) => {
     res.json({ status: 'Backend is running' });
 });
 
+/// Function to get the last summary from the database
+const getLastSummary = async () => {
+    try {
+        const result = await pool.query(`
+            SELECT text FROM summaries
+            ORDER BY id DESC
+            LIMIT 1
+        `);
+        return result.rows[0]?.text || ''; // Return the last summary or an empty string if no summaries exist
+    } catch (err) {
+        console.error('Error fetching last summary:', err.message);
+        throw err; // Re-throw the error to handle it in the calling function
+    }
+};
+
 // Endpoint to run Python script and store messages
 app.post('/run-python', async (req, res) => {
     console.log('Received request body:', req.body); // Debug log
@@ -102,7 +117,11 @@ app.post('/run-python', async (req, res) => {
         if (userMessages.length > 0) {
             const lastUserMessage = userMessages[userMessages.length - 1].content;
 
-            exec(`/app/venv/bin/python script.py "${lastUserMessage}"`, async (error, stdout, stderr) => {
+            // Fetch the last summary from the database
+            const lastSummary = await getLastSummary();
+
+            // Call the Python script with the last summary and the user message
+            exec(`/app/venv/bin/python script.py "${lastSummary}" "${lastUserMessage}"`, async (error, stdout, stderr) => {
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });

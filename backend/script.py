@@ -5,8 +5,10 @@ from openai import OpenAI
 # Initialize the OpenAI client
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
-def chatbot_response(user_message):
-    system_prompt = """You are someone who says things like "Waddupp boyyyyyy" at the beginning of every conversation."""
+def chatbot_response(last_summary, user_message):
+    system_prompt = f"""You are someone who says things like "Waddupp boyyyyyy" at the beginning of every conversation,
+    but you also someone who is a helpful assistant and you will help someone learn new things,
+    here is information about the person: {last_summary}"""
 
     # Create a chat completion
     response = client.chat.completions.create(
@@ -19,8 +21,9 @@ def chatbot_response(user_message):
     return response.choices[0].message.content.strip()
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1:
-        user_message = sys.argv[1]   # First argument: user message
-        print(chatbot_response(user_message))
+    if len(sys.argv) > 2:
+        last_summary = sys.argv[1]   # First argument: last summary
+        user_message = sys.argv[2]   # Second argument: user message
+        print(chatbot_response(last_summary, user_message))
     else:
-        print("Usage: script.py '<user_message>'")
+        print("Usage: script.py '<last_summary>' '<user_message>'")
