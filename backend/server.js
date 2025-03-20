@@ -16,6 +16,7 @@ const pool = new Pool({
 // Create tables if they don't exist
 const createTables = async () => {
     try {
+        // Create conversations table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS conversations (
                 id VARCHAR(255) PRIMARY KEY,
@@ -24,6 +25,8 @@ const createTables = async () => {
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        // Create messages table
         await pool.query(`
             CREATE TABLE IF NOT EXISTS messages (
                 id SERIAL PRIMARY KEY,
@@ -33,12 +36,23 @@ const createTables = async () => {
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
+
+        // Create summaries table
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS summaries (
+                id SERIAL PRIMARY KEY,
+                text TEXT NOT NULL,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         console.log('Tables created or already exist');
     } catch (err) {
         console.error('Error creating tables:', err.message);
     }
 };
 
+// Call the function to create tables
 createTables();
 
 // Health check endpoint
