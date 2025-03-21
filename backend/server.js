@@ -129,11 +129,12 @@ app.post('/run-python', async (req, res) => {
             // Serialize the conversation history as a JSON string
             const historyJson = JSON.stringify(conversationHistory.rows);
 
-            console.log('Conversation History (historyJson):', historyJson); // Debug log
-            
-            // Call the Python script with the system prompt, conversation history, and user message
-            exec(`/app/venv/bin/python script.py '${lastSummary}' '${historyJson}' "${lastUserMessage}"`, async (error, stdout, stderr) => {
+            // Escape single quotes in the JSON string to avoid breaking the command
+            const escapedHistoryJson = historyJson.replace(/'/g, "'\\''");
 
+            // Call the Python script with the system prompt, conversation history, and user message
+            console.log('Conversation History (historyJson):', historyJson); // Debug log
+            exec(`/app/venv/bin/python script.py '${lastSummary}' '${escapedHistoryJson}' "${lastUserMessage}"`, async (error, stdout, stderr) => {
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });
