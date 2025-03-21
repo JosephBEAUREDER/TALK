@@ -203,31 +203,46 @@ app.post('/run-python', async (req, res) => {
                     [conversationId]
                 );
 
-                // Check if the number of messages is a multiple of 10
-                const messageCountResult = await pool.query(
-                    'SELECT COUNT(*) FROM messages WHERE conversation_id = $1',
-                    [conversationId]
+                // Check the total number of messages across all conversations
+                const totalMessageCountResult = await pool.query(
+                    'SELECT COUNT(*) FROM messages'
                 );
-                const messageCount = parseInt(messageCountResult.rows[0].count, 10);
+                const totalMessageCount = parseInt(totalMessageCountResult.rows[0].count, 10);
 
-                console.log('Total message count:', messageCount); // Debug log
+                console.log('Total message count:', totalMessageCount); // Debug log
 
-                if (messageCount % 10 === 0) {
-                    console.log('Triggering summarization for conversation:', conversationId); // Debug log
+                if (totalMessageCount % 10 === 0) {
+                    console.log('Triggering summarization for the last 10 messages overall'); // Debug log
 
-                    // Trigger the summarization endpoint
-                    try {
-                        const summarizationResponse = await fetch(`http://localhost:${PORT}/summarize`, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({ conversationId }),
-                        });
+                    // Fetch the last 10 messages overall
+                    const last10MessagesResult = await pool.query(
+                        'SELECT role, content FROM messages ORDER BY created_at DESC LIMIT 10'
+                    );
+                    const last10Messages = last10MessagesResult.rows.reverse();
 
-                        const summarizationData = await summarizationResponse.json();
-                        console.log('Summarization result:', summarizationData);
-                    } catch (err) {
-                        console.error('Error triggering summarization:', err);
-                    }
+                    // Fetch the last summary
+                    const lastSummary = await getLastSummary();
+
+                    // Serialize the last 10 messages as a JSON string
+                    const last10MessagesJson = JSON.stringify(last10Messages);
+
+                    // Call the summarize.py script
+                    exec(`/app/venv/bin/python summarize.py '${lastSummary}' '${last10MessagesJson}'`, async (error, stdout, stderr) => {
+                        if (error) {
+                            console.error('Summarize script execution error:', stderr);
+                            return;
+                        }
+
+                        const newSummary = stdout.trim();
+
+                        // Insert the new summary into the summaries table
+                        await pool.query(
+                            'INSERT INTO summaries (text) VALUES ($1)',
+                            [newSummary]
+                        );
+
+                        console.log('New summary created:', newSummary);
+                    });
                 }
 
                 // Send the response back to the client
