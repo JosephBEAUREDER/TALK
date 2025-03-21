@@ -77,7 +77,7 @@ const getLastSummary = async () => {
 
 
 
-/// Endpoint to summarize the last 10 messages
+// Endpoint to summarize the last 10 messages
 app.post('/summarize', async (req, res) => {
     const { conversationId } = req.body;
 
@@ -210,7 +210,10 @@ app.post('/run-python', async (req, res) => {
                 );
                 const messageCount = parseInt(messageCountResult.rows[0].count, 10);
 
+                console.log('Total message count:', messageCount); // Debug log
+
                 if (messageCount % 10 === 0) {
+                    console.log('Triggering summarization for conversation:', conversationId); // Debug log
                     // Trigger the summarization endpoint
                     fetch(`http://localhost:${PORT}/summarize`, {
                         method: 'POST',
