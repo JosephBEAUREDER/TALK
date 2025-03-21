@@ -214,17 +214,23 @@ app.post('/run-python', async (req, res) => {
 
                 if (messageCount % 10 === 0) {
                     console.log('Triggering summarization for conversation:', conversationId); // Debug log
+
                     // Trigger the summarization endpoint
-                    fetch(`http://localhost:${PORT}/summarize`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ conversationId }),
-                    })
-                    .then(response => response.json())
-                    .then(data => console.log('Summarization result:', data))
-                    .catch(err => console.error('Error triggering summarization:', err));
+                    try {
+                        const summarizationResponse = await fetch(`http://localhost:${PORT}/summarize`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ conversationId }),
+                        });
+
+                        const summarizationData = await summarizationResponse.json();
+                        console.log('Summarization result:', summarizationData);
+                    } catch (err) {
+                        console.error('Error triggering summarization:', err);
+                    }
                 }
 
+                // Send the response back to the client
                 res.json({ response });
             });
         } else {
