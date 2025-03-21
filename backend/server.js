@@ -226,8 +226,12 @@ app.post('/run-python', async (req, res) => {
                     // Serialize the last 10 messages as a JSON string
                     const last10MessagesJson = JSON.stringify(last10Messages);
 
+                    // Escape quotes in the arguments to avoid breaking the command
+                    const escapedLastSummary = lastSummary.replace(/'/g, "'\\''");
+                    const escapedLast10MessagesJson = last10MessagesJson.replace(/'/g, "'\\''");
+
                     // Call the summarize.py script
-                    exec(`/app/venv/bin/python summarize.py '${lastSummary}' '${last10MessagesJson}'`, async (error, stdout, stderr) => {
+                    exec(`/app/venv/bin/python summarize.py '${escapedLastSummary}' '${escapedLast10MessagesJson}'`, async (error, stdout, stderr) => {
                         if (error) {
                             console.error('Summarize script execution error:', stderr);
                             return;
