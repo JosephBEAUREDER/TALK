@@ -19,7 +19,9 @@ def chatbot_response(last_summary, history_json, user_message):
 
     # Add the conversation history
     for msg in conversation_history:
-        messages.append({"role": msg["role"], "content": msg["content"]})
+        # Map "ai" role to "assistant" for OpenAI API
+        role = "assistant" if msg["role"] == "ai" else msg["role"]
+        messages.append({"role": role, "content": msg["content"]})
 
     # Add the new user message
     messages.append({"role": "user", "content": user_message})
