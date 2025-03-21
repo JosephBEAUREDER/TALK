@@ -77,7 +77,7 @@ const getLastSummary = async () => {
 
 // Endpoint to run Python script and store messages
 app.post('/run-python', async (req, res) => {
-    console.log('Received request body:', req.body); // Debug log
+    // console.log('Received request body:', req.body); // Debug log
     const { messages, name, conversationId, isNewConversation } = req.body;
 
     // Handle both old (name) and new (messages) formats
@@ -129,8 +129,11 @@ app.post('/run-python', async (req, res) => {
             // Serialize the conversation history as a JSON string
             const historyJson = JSON.stringify(conversationHistory.rows);
 
+            console.log('Conversation History (historyJson):', historyJson); // Debug log
+            
             // Call the Python script with the system prompt, conversation history, and user message
             exec(`/app/venv/bin/python script.py '${lastSummary}' '${historyJson}' "${lastUserMessage}"`, async (error, stdout, stderr) => {
+
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });
