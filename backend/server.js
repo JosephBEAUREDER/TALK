@@ -13,47 +13,47 @@ const pool = new Pool({
     ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false,
 });
 
-// Create tables if they don't exist
-const createTables = async () => {
-    try {
-        // Create conversations table
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS conversations (
-                id VARCHAR(255) PRIMARY KEY,
-                title TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+// // Create tables if they don't exist
+// const createTables = async () => {
+//     try {
+//         // Create conversations table
+//         await pool.query(`
+//             CREATE TABLE IF NOT EXISTS conversations (
+//                 id VARCHAR(255) PRIMARY KEY,
+//                 title TEXT NOT NULL,
+//                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+//                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+//             )
+//         `);
 
-        // Create messages table
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS messages (
-                id SERIAL PRIMARY KEY,
-                conversation_id VARCHAR(255) NOT NULL,
-                role VARCHAR(10) NOT NULL,
-                content TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+//         // Create messages table
+//         await pool.query(`
+//             CREATE TABLE IF NOT EXISTS messages (
+//                 id SERIAL PRIMARY KEY,
+//                 conversation_id VARCHAR(255) NOT NULL,
+//                 role VARCHAR(10) NOT NULL,
+//                 content TEXT NOT NULL,
+//                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+//             )
+//         `);
 
-        // Create summaries table
-        await pool.query(`
-            CREATE TABLE IF NOT EXISTS summaries (
-                id SERIAL PRIMARY KEY,
-                text TEXT NOT NULL,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        `);
+//         // Create summaries table
+//         await pool.query(`
+//             CREATE TABLE IF NOT EXISTS summaries (
+//                 id SERIAL PRIMARY KEY,
+//                 text TEXT NOT NULL,
+//                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+//             )
+//         `);
 
-        console.log('Tables created or already exist');
-    } catch (err) {
-        console.error('Error creating tables:', err.message);
-    }
-};
+//         console.log('Tables created or already exist');
+//     } catch (err) {
+//         console.error('Error creating tables:', err.message);
+//     }
+// };
 
-// Call the function to create tables
-createTables();
+// // Call the function to create tables
+// createTables();
 
 // Health check endpoint
 app.get('/', (req, res) => {
@@ -75,9 +75,57 @@ const getLastSummary = async () => {
     }
 };
 
+
+
+/// Endpoint to summarize the last 10 messages
+app.post('/summarize', async (req, res) => {
+    const { conversationId } = req.body;
+
+    if (!conversationId) {
+        return res.status(400).json({ error: 'Conversation ID is required' });
+    }
+
+    try {
+        // Fetch the last 10 messages
+        const last10MessagesResult = await pool.query(
+            'SELECT role, content FROM messages WHERE conversation_id = $1 ORDER BY created_at DESC LIMIT 10',
+            [conversationId]
+        );
+        const last10Messages = last10MessagesResult.rows.reverse();
+
+        // Fetch the last summary
+        const lastSummary = await getLastSummary();
+
+        // Serialize the last 10 messages as a JSON string
+        const last10MessagesJson = JSON.stringify(last10Messages);
+
+        // Call the summarize.py script
+        exec(`/app/venv/bin/python summarize.py '${lastSummary}' '${last10MessagesJson}'`, async (error, stdout, stderr) => {
+            if (error) {
+                console.error('Summarize script execution error:', stderr);
+                return res.status(500).json({ error: 'Summarization failed' });
+            }
+
+            const newSummary = stdout.trim();
+
+            // Insert the new summary into the summaries table
+            await pool.query(
+                'INSERT INTO summaries (text) VALUES ($1)',
+                [newSummary]
+            );
+
+            console.log('New summary created:', newSummary);
+            res.json({ summary: newSummary });
+        });
+    } catch (err) {
+        console.error('Error:', err.message);
+        res.status(500).json({ error: 'Database error' });
+    }
+});
+
 // Endpoint to run Python script and store messages
 app.post('/run-python', async (req, res) => {
-    // console.log('Received request body:', req.body); // Debug log
+    console.log('Received request body:', req.body); // Debug log
     const { messages, name, conversationId, isNewConversation } = req.body;
 
     // Handle both old (name) and new (messages) formats
@@ -129,12 +177,13 @@ app.post('/run-python', async (req, res) => {
             // Serialize the conversation history as a JSON string
             const historyJson = JSON.stringify(conversationHistory.rows);
 
-            // Escape single quotes in the JSON string to avoid breaking the command
+            // Escape quotes in the arguments to avoid breaking the command
+            const escapedLastSummary = lastSummary.replace(/'/g, "'\\''");
             const escapedHistoryJson = historyJson.replace(/'/g, "'\\''");
+            const escapedUserMessage = lastUserMessage.replace(/'/g, "'\\''");
 
             // Call the Python script with the system prompt, conversation history, and user message
-            console.log('Conversation History (historyJson):', historyJson); // Debug log
-            exec(`/app/venv/bin/python script.py '${lastSummary}' '${escapedHistoryJson}' "${lastUserMessage}"`, async (error, stdout, stderr) => {
+            exec(`/app/venv/bin/python script.py '${escapedLastSummary}' '${escapedHistoryJson}' '${escapedUserMessage}'`, async (error, stdout, stderr) => {
                 if (error) {
                     console.error('Script execution error:', stderr);
                     return res.status(500).json({ error: 'Script execution failed' });
@@ -153,6 +202,25 @@ app.post('/run-python', async (req, res) => {
                     'UPDATE conversations SET updated_at = CURRENT_TIMESTAMP WHERE id = $1',
                     [conversationId]
                 );
+
+                // Check if the number of messages is a multiple of 10
+                const messageCountResult = await pool.query(
+                    'SELECT COUNT(*) FROM messages WHERE conversation_id = $1',
+                    [conversationId]
+                );
+                const messageCount = parseInt(messageCountResult.rows[0].count, 10);
+
+                if (messageCount % 10 === 0) {
+                    // Trigger the summarization endpoint
+                    fetch(`http://localhost:${PORT}/summarize`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ conversationId }),
+                    })
+                    .then(response => response.json())
+                    .then(data => console.log('Summarization result:', data))
+                    .catch(err => console.error('Error triggering summarization:', err));
+                }
 
                 res.json({ response });
             });
