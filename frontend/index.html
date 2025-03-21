@@ -345,7 +345,7 @@ async function sendMessage() {
         const payload = {
             messages: isNewConversation 
                 ? [
-                    { role: 'ai', content: 'Hello! How can I assist you today?' },
+                    // { role: 'ai', content: 'Hello! How can I assist you today?' },
                     { role: 'user', content: message }
                   ]
                 : [{ role: 'user', content: message }],
